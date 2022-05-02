@@ -1,9 +1,15 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+const string connectionString = "Data Source=greetings.db;";
+builder.Services.AddSqlite<GreetingDbContext>(connectionString);
 
 var app = builder.Build();
 
@@ -16,28 +22,27 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.MapGet("/greetings", async (GreetingDbContext db) => await db.Greetings.ToListAsync())
+   .WithName("GetAllGreetings");
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-       new WeatherForecast
-       (
-           DateTime.Now.AddDays(index),
-           Random.Shared.Next(-20, 55),
-           summaries[Random.Shared.Next(summaries.Length)]
-       ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapPost("/greetings", async ([FromBody] Greeting greeting, GreetingDbContext db) =>
+    {
+        db.Greetings.Add(greeting);
+        await db.SaveChangesAsync();
+
+        return Results.Created($"/greetings/{greeting.Id}", greeting);
+    })
+    .WithName("AddGreeting");
+
+app.MapGet("/greetings/{id}", async (int id, GreetingDbContext db) =>
+    {
+        return await db.Greetings.FindAsync(id)
+            is Greeting greeting
+                ? Results.Ok(greeting)
+                : Results.NotFound();
+    })
+    .WithName("GetGreetingById");
 
 app.Run();
 
-internal record WeatherForecast(DateTime Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+public partial class Program { } // Required for Testing
